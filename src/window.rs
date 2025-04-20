@@ -48,7 +48,7 @@ impl Window {
         self.glfw.poll_events();
         self.window.swap_buffers();
     }
-    
+
     pub fn get_size(&self) -> (i32, i32) {
         self.size
     }
@@ -62,12 +62,12 @@ impl Drop for Window {
 
 impl HasWindowHandle for Window {
     fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
-        todo!()
+        Ok(self.window.window_handle()?)
     }
 }
 
 impl HasDisplayHandle for Window {
     fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
-        todo!()
+        Ok(self.window.display_handle()?)
     }
 }

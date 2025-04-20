@@ -8,20 +8,19 @@ pub struct Wgpu<'a> {
     device: Device,
     queue: Queue,
     config: SurfaceConfiguration,
-    window: &'a mut Window,
 }
 
 impl <'a> Wgpu<'a> {
-    pub async unsafe fn new(window: &'a mut Window) -> Self {
+    pub async unsafe fn new(window: &Window) -> Self {
         unsafe {
             let descriptor = wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::all(), ..Default::default()
             };
 
             let instance = Instance::new(&descriptor);
-
+            
             let target = unsafe {
-                wgpu::SurfaceTargetUnsafe::from_window(window)
+                wgpu::SurfaceTargetUnsafe::from_window(&window)
             }.expect("Failed to create surface target.");
 
             let surface = instance
@@ -71,8 +70,7 @@ impl <'a> Wgpu<'a> {
                 surface,
                 device,
                 queue,
-                config,
-                window,
+                config
             }
         }
     }
