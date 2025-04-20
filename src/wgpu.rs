@@ -2,7 +2,7 @@ use wgpu::{Device, Instance, Queue, Surface, SurfaceConfiguration};
 
 use crate::window::Window;
 
-pub struct Wgpu<'a> {
+pub struct WGPU<'a> {
     instance: Instance,
     surface: Surface<'a>,
     device: Device,
@@ -10,7 +10,7 @@ pub struct Wgpu<'a> {
     config: SurfaceConfiguration,
 }
 
-impl <'a> Wgpu<'a> {
+impl <'a> WGPU<'a> {
     pub async unsafe fn new(window: &Window) -> Self {
         unsafe {
             let descriptor = wgpu::InstanceDescriptor {
@@ -65,7 +65,7 @@ impl <'a> Wgpu<'a> {
                 desired_maximum_frame_latency: 2,
             };
 
-            Wgpu {
+            WGPU {
                 instance,
                 surface,
                 device,

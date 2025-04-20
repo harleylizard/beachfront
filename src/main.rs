@@ -1,13 +1,17 @@
 mod window;
 mod wgpu;
+mod opengl;
+mod pipeline;
 
 fn main() {
     let mut window = window::Window::new();
 
-    // let wgpu = pollster::block_on(unsafe { wgpu::Wgpu::new(&window) });
+    let pipeline = pipeline::Pipeline::new(&window);
     
     while !window.should_close() {
         window.poll();
+        
+        pipeline.draw();
         
     }
 }
