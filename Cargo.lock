@@ -37,6 +37,7 @@ name = "beachfront"
 version = "0.1.0"
 dependencies = [
  "glfw",
+ "raw-window-handle",
  "wgpu",
 ]
 
