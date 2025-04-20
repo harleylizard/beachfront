@@ -5,3 +5,4 @@ edition = "2024"
 
 [dependencies]
 glfw = "0.59.0"
+wgpu = "25.0.0"
