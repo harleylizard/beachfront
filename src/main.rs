@@ -1,3 +1,10 @@
+mod window;
+
 fn main() {
-    println!("Hello, world!");
+    let mut window = window::Window::new();
+    
+    while !window.should_close() {
+        window.poll();
+        
+    }
 }
