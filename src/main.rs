@@ -2,7 +2,7 @@ mod entity;
 mod textures;
 
 use crate::entity::{draw_entity, Item};
-use crate::textures::Textures;
+use crate::textures::Atlases;
 use bevy::app::*;
 use bevy::prelude::*;
 use bevy::DefaultPlugins;
@@ -22,7 +22,7 @@ fn main() {
   app.add_loading_state(
     LoadingState::new(Stage::Loading)
         .continue_to_state(Stage::Game)
-        .load_collection::<Textures>()
+        .load_collection::<Atlases>()
   );
   app.add_systems(Startup, start_up);
   app.add_systems(Update, update);
@@ -31,7 +31,7 @@ fn main() {
 }
 
 fn start_up(mut commands: Commands) {
-  commands.spawn(Camera2d::default());
+  commands.spawn(Camera2d);
   commands.spawn(Item::new());
 }
 
