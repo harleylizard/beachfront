@@ -17,7 +17,7 @@ enum Stage {
 
 fn main() {
   let mut app = App::new();
-  app.add_plugins(DefaultPlugins.set(ImagePlugin::default()));
+  app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()));
   app.insert_state(Stage::Loading);
   app.add_loading_state(
     LoadingState::new(Stage::Loading)
@@ -31,7 +31,7 @@ fn main() {
 }
 
 fn start_up(mut commands: Commands) {
-  commands.spawn(Camera2d);
+  commands.spawn(Camera2d::default());
   commands.spawn(Item::new());
 }
 
