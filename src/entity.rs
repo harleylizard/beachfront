@@ -77,8 +77,8 @@ trait Move {
 
         let translation = self.translation();
         translation.x = x;
-        translation.y = y;
-        translation.z = z;
+        translation.y = z + y;
+        translation.z = 0.0;
     }
 }
 
