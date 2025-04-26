@@ -4,6 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = {version = "0.16.0-rc.5", features = ["bevy_sprite"]}
-bevy_asset_loader = {version = "0.23.0-rc.3", features = ["2d"]}
+bevy = { version = "0.16", features = ["bevy_sprite"] }
+bevy_asset_loader = { version = "0.23.0-rc.3", features = [
+    "2d",
+] } # no later version for bevy:0.16
 iyes_loopless = "0.9.1"
