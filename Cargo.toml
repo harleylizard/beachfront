@@ -9,3 +9,4 @@ bevy_asset_loader = { version = "0.23.0-rc.3", features = [
     "2d",
 ] } # no later version for bevy:0.16
 iyes_loopless = "0.9.1"
+discriminant = { path = "crates/discriminant" }

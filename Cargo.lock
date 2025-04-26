@@ -2019,6 +2019,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "discriminant"
+version = "0.1.0"
+dependencies = [
+ "discriminant_proc_macro",
+]
+
+[[package]]
+name = "discriminant_proc_macro"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.100",
+]
+
+[[package]]
 name = "dispatch"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2181,6 +2197,7 @@ version = "0.1.0"
 dependencies = [
  "bevy",
  "bevy_asset_loader",
+ "discriminant",
  "iyes_loopless",
 ]
 
