@@ -1,12 +1,14 @@
 mod assets;
 mod entity;
 mod registry;
+mod render;
 
 use assets::AssetInitiatorPlugin;
 use bevy::app::*;
 use bevy::prelude::*;
 use discriminant::Enum;
 use registry::RegistryPlugin;
+use render::RenderPlugin;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, States, Enum)]
 #[repr(u8)]
@@ -23,7 +25,8 @@ fn main() {
     app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
         .init_state::<Stage>()
         .add_plugins(AssetInitiatorPlugin)
-        .add_plugins(RegistryPlugin);
+        .add_plugins(RegistryPlugin)
+        .add_plugins(RenderPlugin);
 
     #[cfg(debug_assertions)]
     {

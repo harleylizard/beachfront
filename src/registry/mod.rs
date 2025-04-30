@@ -65,6 +65,7 @@ impl Plugin for RegistryPlugin {
     fn build(&self, app: &mut bevy::app::App) {
         register!(app, "items", Item);
         #[cfg(debug_assertions)]
+        // for inspector debugging
         {
             app.register_type::<SpriteRef>();
             app.register_type::<IndexConfig>();

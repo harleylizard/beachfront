@@ -3,8 +3,7 @@
     "apple": {
       "sprite": {
         "idx_config": 0
-      },
-      "name": "Apple"
+      }
     }
   },
   "identifier": "items",
