@@ -1,32 +1,54 @@
 mod items;
 
-use std::{collections::HashMap, io, marker::PhantomData, ops::Deref, sync::Arc};
+use std::{collections::HashMap, io, marker::PhantomData, ops::Deref, path::PathBuf, sync::Arc};
 
 use bevy::{
     app::Plugin,
-    asset::{Asset, AssetApp, AssetLoader, AsyncReadExt, Handle},
-    ecs::{bundle::Bundle, component::Component, resource::Resource, system::Commands},
-    reflect::{Reflect, TypePath},
+    asset::{Asset, AssetApp, AssetLoader, AssetServer, Assets, AsyncReadExt, Handle},
+    ecs::{
+        bundle::Bundle,
+        component::Component,
+        entity::Entity,
+        resource::Resource,
+        system::{Commands, Local, Query, Res, ResMut},
+    },
+    image::{Image, TextureAtlasLayout},
+    log::{error, info},
+    math::UVec2,
+    reflect::{GetField, Reflect, TypePath},
+    sprite::Sprite,
+    utils::default,
 };
-use items::{Item, ItemRegistryHandle};
+use items::Item;
 use macros::register;
 use serde::Deserialize;
 use thiserror::Error;
 
+use crate::assets::Atlases;
+
 mod macros {
     macro_rules! register {
-        ($app:expr, $path:expr, $item:ty, $item_res:ty) => {
+        ($app:expr, $path:expr, $item:ty) => {
             let _: () = {
+                use bevy::prelude::IntoScheduleConfigs;
+
                 fn __load_registry(
                     mut commands: Commands,
                     asset_server: bevy::prelude::Res<bevy::prelude::AssetServer>,
                 ) {
-                    let handle = asset_server.load(concat!("registry/", $path, ".json"));
-                    commands.insert_resource(
-                        <$item_res as $crate::registry::FromHandle>::from_handle(handle),
-                    );
+                    let handle: Handle<Registry<$item>> =
+                        asset_server.load(concat!("registry/", $path, ".json"));
+                    commands.insert_resource(RegistryHandles::new(handle));
                 }
-                $app.add_systems(bevy::app::Startup, __load_registry);
+                $app.add_systems(bevy::app::PreStartup, __load_registry);
+                $app.add_systems(
+                    bevy::app::PreUpdate,
+                    (
+                        Registry::<$item>::create_atlas_handle,
+                        Registry::<$item>::update_sprite_refs,
+                    )
+                        .in_set($crate::assets::RequiresAssetSet),
+                );
             };
 
             $app.init_asset::<Registry<$item>>();
@@ -34,34 +56,53 @@ mod macros {
         };
     }
 
-    macro_rules! impl_from_handle {
-        ($type:ty, $reg_item:ty) => {
-            impl $crate::registry::FromHandle for $type {
-                type RegistryItem = $reg_item;
-
-                fn from_handle(
-                    handle: Handle<Registry<<Self as $crate::registry::FromHandle>::RegistryItem>>,
-                ) -> Self {
-                    Self(handle)
-                }
-            }
-        };
-    }
-
-    pub(super) use {impl_from_handle, register};
+    pub(super) use register;
 }
 
 pub struct RegistryPlugin;
 
 impl Plugin for RegistryPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        register!(app, "items", Item, ItemRegistryHandle);
+        register!(app, "items", Item);
+        #[cfg(debug_assertions)]
+        {
+            app.register_type::<SpriteRef>();
+            app.register_type::<IndexConfig>();
+        }
     }
+}
+
+/// Describes the sprite used by a registry item.
+#[derive(Clone, Component, Deserialize)]
+#[cfg_attr(debug_assertions, derive(Reflect))]
+#[cfg_attr(not(debug_assertions), expect(unused))]
+pub struct SpriteRef {
+    /// Specifies the file to use for the sprite.
+    ///
+    /// If it is not present, the game will try to use the default sprite.
+    file: Option<PathBuf>,
+    idx_config: IndexConfig,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+#[cfg_attr(debug_assertions, derive(Reflect))]
+#[cfg_attr(not(debug_assertions), expect(unused))]
+#[serde(untagged)]
+pub enum IndexConfig {
+    Single(usize),
+    Range { start: usize, stop: usize },
 }
 
 #[derive(Clone, Component, Deserialize, PartialEq, Eq, Hash)]
 #[serde(transparent)]
 pub struct Identifier(Arc<String>); // todo
+
+impl Identifier {
+    #[expect(unused)]
+    pub fn new(s: impl Into<String>) -> Self {
+        Self(Arc::new(s.into()))
+    }
+}
 
 impl Deref for Identifier {
     type Target = String;
@@ -71,8 +112,19 @@ impl Deref for Identifier {
     }
 }
 
-#[derive(Asset, Default, Reflect)]
-pub struct Registry<Item: TypePath + Send + Sync>(HashMap<Identifier, Item>);
+#[derive(Asset, Reflect, Deserialize)]
+pub struct Registry<Item: TypePath + Send + Sync> {
+    items: HashMap<Identifier, Item>,
+    identifier: String,
+    atlas_layout: Option<AtlasConfig>,
+}
+
+#[derive(Reflect, Deserialize)]
+pub struct AtlasConfig {
+    tile_size: (u32, u32),
+    columns: u32,
+    rows: u32,
+}
 
 #[expect(unused)]
 impl<Item> Registry<Item>
@@ -80,7 +132,7 @@ where
     Item: Bundle + Clone + TypePath,
 {
     pub fn get(&self, identifier: &Identifier) -> Option<Item> {
-        self.0.get(identifier).cloned()
+        self.items.get(identifier).cloned()
     }
 
     pub fn spawn(
@@ -92,17 +144,89 @@ where
         let item = self.get(identifier);
 
         if let Some(v) = item {
-            commands.spawn((v.clone(), addition));
+            commands.spawn((v, addition));
             return true;
         }
 
         false
     }
+
+    fn create_atlas_handle(
+        server: Res<AssetServer>,
+        registries: Res<Assets<Registry<Item>>>,
+        mut handle: ResMut<RegistryHandles<Item>>,
+        mut texture_atlas_layouts: ResMut<Assets<TextureAtlasLayout>>,
+        mut run_once: Local<bool>,
+    ) {
+        if !server.is_loaded(&handle.registry) || *run_once {
+            return;
+        }
+
+        let registry = registries.get(&handle.registry).unwrap();
+
+        let Some(ref atlas_layout) = registry.atlas_layout else {
+            *run_once = true;
+            return;
+        };
+
+        let atlas_layout = TextureAtlasLayout::from_grid(
+            UVec2::from(atlas_layout.tile_size),
+            atlas_layout.columns,
+            atlas_layout.rows,
+            None,
+            None,
+        );
+
+        let atlas_layout_handle = texture_atlas_layouts.add(atlas_layout);
+        handle.atlas_layout = Some(atlas_layout_handle);
+
+        *run_once = true;
+    }
+
+    fn update_sprite_refs(
+        mut commands: Commands,
+        query: Query<(&SpriteRef, Entity)>,
+        reg_handles: Res<RegistryHandles<Item>>,
+        registries: Res<Assets<Registry<Item>>>,
+        ta_layouts: Res<Assets<TextureAtlasLayout>>,
+        atlases: Res<Atlases>,
+    ) {
+        let Some(ref tal_handle) = reg_handles.atlas_layout else {
+            info!("oops");
+            return;
+        };
+
+        let reg = registries.get(&reg_handles.registry).unwrap();
+
+        for (spref, id) in &query {
+            let IndexConfig::Single(idx) = spref.idx_config else {
+                error!("IndexConfig::Range is not supported yet.");
+                continue;
+            };
+
+            let Some(image): Option<&Handle<Image>> = atlases.get_field(&reg.identifier) else {
+                error!("Could not find texture for registry {}", &reg.identifier);
+                return;
+            };
+
+            let mut entity_commands = commands.entity(id);
+            entity_commands.insert(Sprite {
+                image: image.clone_weak(),
+                texture_atlas: Some(bevy::image::TextureAtlas {
+                    layout: tal_handle.clone_weak(),
+                    index: idx,
+                }),
+                ..default()
+            });
+
+            entity_commands.remove::<SpriteRef>();
+        }
+    }
 }
 
 struct RegistryLoader<T>(PhantomData<T>);
 
-impl<T: Send + Sync + TypePath> Default for RegistryLoader<Registry<T>> {
+impl<T: Send + Sync + TypePath> Default for RegistryLoader<T> {
     fn default() -> Self {
         Self(PhantomData)
     }
@@ -112,7 +236,7 @@ impl<T: Send + Sync + TypePath> Default for RegistryLoader<Registry<T>> {
 pub enum RegistryLoadError {
     #[error("Could not load registry file: {0}")]
     IoError(#[from] io::Error),
-    #[error("Failed to parse registry JSON")]
+    #[error("Failed to parse registry JSON: {0}")]
     JsonError(#[from] serde_json::Error),
 }
 
@@ -130,11 +254,11 @@ where
         _: &Self::Settings,
         _: &mut bevy::asset::LoadContext<'_>,
     ) -> Result<Self::Asset, Self::Error> {
-        let mut buf = String::new();
+        let mut buf = String::with_capacity(1024 * 64); // 64K
         reader.read_to_string(&mut buf).await?;
-        let map = serde_json::from_str(&buf)?;
+        let s = serde_json::from_str(&buf)?;
 
-        Ok(Registry(map))
+        Ok(s)
     }
 
     fn extensions(&self) -> &[&str] {
@@ -142,8 +266,20 @@ where
     }
 }
 
-pub trait FromHandle: Resource + Sized {
-    type RegistryItem: Send + Sync + TypePath;
+#[derive(Resource)]
+pub struct RegistryHandles<Item: Send + Sync + TypePath> {
+    registry: Handle<Registry<Item>>,
+    atlas_layout: Option<Handle<TextureAtlasLayout>>,
+}
 
-    fn from_handle(handle: Handle<Registry<Self::RegistryItem>>) -> Self;
+impl<Item> RegistryHandles<Item>
+where
+    Item: Send + Sync + TypePath,
+{
+    const fn new(inner: Handle<Registry<Item>>) -> Self {
+        Self {
+            registry: inner,
+            atlas_layout: None,
+        }
+    }
 }
