@@ -10,10 +10,10 @@ use bevy::{
         component::Component,
         entity::Entity,
         resource::Resource,
-        system::{Commands, Local, Query, Res, ResMut},
+        system::{Commands, Local, Query, Res, ResMut, SystemParam},
     },
     image::{Image, TextureAtlas, TextureAtlasLayout},
-    log::{error, info},
+    log::error,
     math::UVec2,
     reflect::{GetField, Reflect, TypePath},
     sprite::Sprite,
@@ -186,17 +186,16 @@ where
     fn update_sprite_refs(
         mut commands: Commands,
         query: Query<(&SpriteRef, Entity)>,
-        reg_handles: Res<RegistryHandles<Item>>,
-        registries: Res<Assets<Registry<Item>>>,
+        registry: RegistryAccess<Item>,
         ta_layouts: Res<Assets<TextureAtlasLayout>>,
         atlases: Res<Atlases>,
     ) {
-        let Some(ref tal_handle) = reg_handles.atlas_layout else {
-            info!("oops");
+        let Some(tal_handle) = registry.texture_atlas_layout() else {
+            panic!("oops");
             return;
         };
 
-        let reg = registries.get(&reg_handles.registry).unwrap();
+        let reg = registry.registry();
 
         for (spref, id) in &query {
             let Some(image): Option<&Handle<Image>> = atlases.get_field(&reg.identifier) else {
@@ -292,5 +291,27 @@ where
             registry: inner,
             atlas_layout: None,
         }
+    }
+}
+
+#[derive(SystemParam)]
+pub struct RegistryAccess<'w, Item>
+where
+    Item: Send + Sync + TypePath,
+{
+    handle: Res<'w, RegistryHandles<Item>>,
+    registries: Res<'w, Assets<Registry<Item>>>,
+}
+
+impl<'w, Item> RegistryAccess<'w, Item>
+where
+    Item: Send + Sync + TypePath,
+{
+    pub fn registry(&self) -> &Registry<Item> {
+        self.registries.get(&self.handle.registry).unwrap()
+    }
+
+    fn texture_atlas_layout(&self) -> &Option<Handle<TextureAtlasLayout>> {
+        &self.handle.atlas_layout
     }
 }
