@@ -4,12 +4,21 @@
       "sprite": {
         "idx_config": 0
       }
+    },
+    "animated_object": {
+      "sprite": {
+        "idx_config": {
+          "start": 7,
+          "stop": 14,
+          "fps": 8
+        }
+      }
     }
   },
   "identifier": "items",
   "atlas_layout": {
     "tile_size": [16, 16],
-    "columns": 1,
-    "rows": 1
+    "columns": 8,
+    "rows": 8
   }
 }

@@ -12,19 +12,18 @@ use bevy::{
         resource::Resource,
         system::{Commands, Local, Query, Res, ResMut},
     },
-    image::{Image, TextureAtlasLayout},
+    image::{Image, TextureAtlas, TextureAtlasLayout},
     log::{error, info},
     math::UVec2,
     reflect::{GetField, Reflect, TypePath},
     sprite::Sprite,
-    utils::default,
 };
 use items::Item;
 use macros::register;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::assets::Atlases;
+use crate::{assets::Atlases, render::animation::AnimationConfig};
 
 mod macros {
     macro_rules! register {
@@ -91,7 +90,7 @@ pub struct SpriteRef {
 #[serde(untagged)]
 pub enum IndexConfig {
     Single(usize),
-    Range { start: usize, stop: usize },
+    Range(AnimationConfig),
 }
 
 #[derive(Clone, Component, Deserialize, PartialEq, Eq, Hash)]
@@ -200,25 +199,36 @@ where
         let reg = registries.get(&reg_handles.registry).unwrap();
 
         for (spref, id) in &query {
-            let IndexConfig::Single(idx) = spref.idx_config else {
-                error!("IndexConfig::Range is not supported yet.");
-                continue;
-            };
-
             let Some(image): Option<&Handle<Image>> = atlases.get_field(&reg.identifier) else {
                 error!("Could not find texture for registry {}", &reg.identifier);
                 return;
             };
 
             let mut entity_commands = commands.entity(id);
-            entity_commands.insert(Sprite {
-                image: image.clone_weak(),
-                texture_atlas: Some(bevy::image::TextureAtlas {
-                    layout: tal_handle.clone_weak(),
-                    index: idx,
-                }),
-                ..default()
-            });
+
+            match spref.idx_config {
+                IndexConfig::Single(idx) => {
+                    entity_commands.insert(Sprite::from_atlas_image(
+                        image.clone_weak(),
+                        TextureAtlas {
+                            layout: tal_handle.clone_weak(),
+                            index: idx,
+                        },
+                    ));
+                }
+                IndexConfig::Range(ref ac) => {
+                    entity_commands.insert((
+                        Sprite::from_atlas_image(
+                            image.clone_weak(),
+                            TextureAtlas {
+                                layout: tal_handle.clone_weak(),
+                                index: ac.start,
+                            },
+                        ),
+                        ac.clone(),
+                    ));
+                }
+            };
 
             entity_commands.remove::<SpriteRef>();
         }
