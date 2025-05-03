@@ -1,6 +1,4 @@
-mod items;
-
-use std::{collections::HashMap, io, marker::PhantomData, ops::Deref, path::PathBuf, sync::Arc};
+use std::{collections::HashMap, io, marker::PhantomData, path::PathBuf};
 
 use bevy::{
     app::Plugin,
@@ -9,27 +7,26 @@ use bevy::{
         bundle::Bundle,
         component::Component,
         entity::Entity,
-        resource::Resource,
-        system::{Commands, Local, Query, Res, ResMut},
+        system::{Commands, Local, Query, Res, ResMut, Resource, SystemParam},
     },
-    image::{Image, TextureAtlas, TextureAtlasLayout},
-    log::{error, info},
+    image::Image,
+    log::error,
     math::UVec2,
     reflect::{GetField, Reflect, TypePath},
-    sprite::Sprite,
+    sprite::{Sprite, TextureAtlas, TextureAtlasLayout},
 };
-use items::Item;
+use internment::Intern;
 use macros::register;
 use serde::Deserialize;
 use thiserror::Error;
 
-use crate::{assets::Atlases, render::animation::AnimationConfig};
+use crate::{assets::Atlases, entity::LivingEntity, render::animation::AnimationConfig};
 
 mod macros {
     macro_rules! register {
         ($app:expr, $path:expr, $item:ty) => {
             let _: () = {
-                use bevy::prelude::IntoScheduleConfigs;
+                use bevy::prelude::IntoSystemConfigs;
 
                 fn __load_registry(
                     mut commands: Commands,
@@ -46,7 +43,8 @@ mod macros {
                         Registry::<$item>::create_atlas_handle,
                         Registry::<$item>::update_sprite_refs,
                     )
-                        .in_set($crate::assets::RequiresAssetSet),
+                        .in_set($crate::assets::RequiresAssetSet)
+                        .chain(),
                 );
             };
 
@@ -62,13 +60,14 @@ pub struct RegistryPlugin;
 
 impl Plugin for RegistryPlugin {
     fn build(&self, app: &mut bevy::app::App) {
-        register!(app, "items", Item);
         #[cfg(debug_assertions)]
         // for inspector debugging
         {
             app.register_type::<SpriteRef>();
             app.register_type::<IndexConfig>();
         }
+
+        register!(app, "entity", LivingEntity);
     }
 }
 
@@ -93,22 +92,21 @@ pub enum IndexConfig {
     Range(AnimationConfig),
 }
 
-#[derive(Clone, Component, Deserialize, PartialEq, Eq, Hash)]
-#[serde(transparent)]
-pub struct Identifier(Arc<String>); // todo
+#[derive(Clone, Copy, Component, PartialEq, Eq, Hash)]
+pub struct Identifier(Intern<String>);
 
 impl Identifier {
-    #[expect(unused)]
     pub fn new(s: impl Into<String>) -> Self {
-        Self(Arc::new(s.into()))
+        Self(Intern::new(s.into()))
     }
 }
 
-impl Deref for Identifier {
-    type Target = String;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
+impl<'de> Deserialize<'de> for Identifier {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self::new(String::deserialize(deserializer)?))
     }
 }
 
@@ -144,7 +142,7 @@ where
         let item = self.get(identifier);
 
         if let Some(v) = item {
-            commands.spawn((v, addition));
+            commands.spawn((v, identifier.clone(), addition));
             return true;
         }
 
@@ -186,17 +184,16 @@ where
     fn update_sprite_refs(
         mut commands: Commands,
         query: Query<(&SpriteRef, Entity)>,
-        reg_handles: Res<RegistryHandles<Item>>,
-        registries: Res<Assets<Registry<Item>>>,
+        registry: RegistryAccess<Item>,
         ta_layouts: Res<Assets<TextureAtlasLayout>>,
         atlases: Res<Atlases>,
     ) {
-        let Some(ref tal_handle) = reg_handles.atlas_layout else {
-            info!("oops");
+        let Some(tal_handle) = registry.texture_atlas_layout() else {
+            panic!("oops");
             return;
         };
 
-        let reg = registries.get(&reg_handles.registry).unwrap();
+        let reg = registry.registry();
 
         for (spref, id) in &query {
             let Some(image): Option<&Handle<Image>> = atlases.get_field(&reg.identifier) else {
@@ -292,5 +289,27 @@ where
             registry: inner,
             atlas_layout: None,
         }
+    }
+}
+
+#[derive(SystemParam)]
+pub struct RegistryAccess<'w, Item>
+where
+    Item: Send + Sync + TypePath,
+{
+    handle: Res<'w, RegistryHandles<Item>>,
+    registries: Res<'w, Assets<Registry<Item>>>,
+}
+
+impl<'w, Item> RegistryAccess<'w, Item>
+where
+    Item: Send + Sync + TypePath,
+{
+    pub fn registry(&self) -> &Registry<Item> {
+        self.registries.get(&self.handle.registry).unwrap()
+    }
+
+    fn texture_atlas_layout(&self) -> &Option<Handle<TextureAtlasLayout>> {
+        &self.handle.atlas_layout
     }
 }

@@ -1,0 +1,19 @@
+{
+  "items": {
+    "player": {
+      "sprite": {
+        "idx_config": {
+          "start": 0,
+          "stop": 3,
+          "fps": 8
+        }
+      }
+    }
+  },
+  "identifier": "entity",
+  "atlas_layout": {
+    "tile_size": [16, 16],
+    "columns": 2,
+    "rows": 2
+  }
+}

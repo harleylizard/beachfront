@@ -4,13 +4,15 @@ mod registry;
 mod render;
 
 use assets::AssetInitiatorPlugin;
+use avian2d::PhysicsPlugins;
 use bevy::app::*;
 use bevy::prelude::*;
-use discriminant::Enum;
+use entity::EntityPlugins;
+use entity::movement::MovementPlugin;
 use registry::RegistryPlugin;
 use render::RenderPlugin;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, States, Enum)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, States)]
 #[repr(u8)]
 pub enum Stage {
     #[default]
@@ -21,24 +23,24 @@ pub enum Stage {
 
 fn main() {
     let mut app = App::new();
+    let default_plugins = DefaultPlugins.set(ImagePlugin::default_nearest());
 
-    app.add_plugins(DefaultPlugins.set(ImagePlugin::default_nearest()))
+    app.add_plugins(default_plugins)
         .init_state::<Stage>()
+        .add_plugins(PhysicsPlugins::default())
+        .add_plugins(MovementPlugin)
         .add_plugins(AssetInitiatorPlugin)
         .add_plugins(RegistryPlugin)
-        .add_plugins(RenderPlugin);
+        .add_plugins(RenderPlugin)
+        .add_plugins(EntityPlugins);
 
     #[cfg(debug_assertions)]
     {
-        use bevy_inspector_egui::bevy_egui::EguiPlugin;
+        use avian2d::prelude::PhysicsDebugPlugin;
         use bevy_inspector_egui::quick::WorldInspectorPlugin;
 
-        app.add_plugins((
-            EguiPlugin {
-                enable_multipass_for_primary_context: true,
-            },
-            WorldInspectorPlugin::default(),
-        ))
+        app.add_plugins(WorldInspectorPlugin::new())
+            .add_plugins(PhysicsDebugPlugin::default());
     };
 
     app.run();

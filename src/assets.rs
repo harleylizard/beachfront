@@ -2,8 +2,8 @@ use bevy::{
     app::{App, FixedUpdate, Plugin, PreUpdate, Update},
     asset::Handle,
     ecs::{
-        resource::Resource,
-        schedule::{IntoScheduleConfigs, SystemSet},
+        schedule::{IntoSystemSetConfigs, SystemSet},
+        system::Resource,
     },
     image::Image,
     reflect::Reflect,
@@ -39,4 +39,6 @@ pub struct RequiresAssetSet;
 pub struct Atlases {
     #[asset(path = "textures/items.png")]
     pub items: Handle<Image>,
+    #[asset(path = "textures/entity.png")]
+    pub entity: Handle<Image>,
 }
